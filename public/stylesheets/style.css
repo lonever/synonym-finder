@@ -6,3 +6,8 @@ body {
 a {
   color: #00B7FF;
 }
+
+span.found{
+  display: inline-block;
+  padding-right: 0.5em;
+}

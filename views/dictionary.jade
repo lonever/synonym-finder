@@ -1,0 +1,14 @@
+extends layout
+
+block content
+  h1 My dictionary
+
+  if dictionary
+    div
+      each val in dictionary
+        span(class="found")= val
+  else
+    div You don't have a dictionary
+
+  a(href="word") Words
+

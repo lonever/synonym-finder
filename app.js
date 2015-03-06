@@ -8,14 +8,15 @@ let cookieParser = require("cookie-parser");
 let bodyParser = require("body-parser");
 let mongojs = require("mongojs");
 let crypto = require("crypto");
-let wordpos
+let WordPOS = require("wordpos");
 
+let wordpos = new WordPOS();
 let superSecretKey = "NO ONE WILL KNOW THIS";
-
 
 let db = mongojs("words");
 
 db.users = db.collection("users");
+db.dictionary = db.collection("dictionary");
 
 let app = express();
 
@@ -82,10 +83,161 @@ function hashPassword (password) {
   return shasum.digest("hex");
 }
 
-// respond with "Hello World!" on the homepage
+function findSynonyms(word, cb) {
+  let found = [];
+  wordpos.lookup(word, function (results) {
+    for (let i = 0; i < results.length; ++i) {
+      let result = results[i];
+      for (let j = 0; j < result.synonyms.length; ++j) {
+        let synonym = result.synonyms[j];
+        if (found.indexOf(synonym) == -1) {
+          found.push(synonym);
+        }
+      }
+    }
+    cb(found);
+  })
+}
+
+function findSynonymsSet(words, cb) {
+  let found = [];
+  let pending = words.length;
+  for (let i = 0; i < words.length; ++i) {
+    let word = words[i];
+    findSynonyms(word, function (results) {
+      for (let j = 0; j < results.length; ++j) {
+        if (found.indexOf(results[j]) == -1) {
+          found.push(results[j]);
+        }
+      }
+      pending--;
+      if (pending == 0) {
+        cb(found);
+      }
+    })
+  }
+  if (pending == 0) {
+    cb(found);
+  }
+}
+
+function findTieredSynonyms(word, tier, cb) {
+  if (typeof(word) == "string") {
+    word = [word];
+  }
+  if (tier != 0) {
+    findSynonymsSet(word, function (results) {
+      findTieredSynonyms(results, tier - 1, cb)
+    });
+  } else {
+    cb(word);
+  }
+}
+
+function storeInDictionary(username, word, results, cb) {
+  db.dictionary.findOne({username: username}, function (err, doc) {
+    if (err) {
+      throw new Error(err);
+    }
+    let data = {
+      query: word,
+      result: results
+    };
+
+    if (!doc) {
+      db.dictionary.save({
+        username: username,
+        data: [data]
+      }, function (err) {
+        if (err) {
+          throw new Error(err);
+        }
+        cb()
+      })
+      return;
+    }
+    for (let i = 0; i < doc.data.length; ++i) {
+      if (doc.data[i].query == word) {
+        cb();
+        return;
+      }
+    }
+    db.dictionary.update({username: username}, {$push: {data: data}}, function (err) {
+      if (err) {
+        throw new Error(err);
+      }
+      cb();
+      return;
+    })
+  });
+}
+
+function checkDictionary(username, word, cb) {
+  db.dictionary.findOne({username: username}, function (err, doc) {
+    if (err) {
+      throw new Error(err);
+    }
+    if (!doc) {
+      cb(null);
+      return;
+    }
+    for (let i=0; i < doc.data.length; ++i) {
+      if (word == doc.data[i].query) {
+        console.log("EXIST IN DICTIONARY!");
+        cb(doc.data[i].result);
+        return;
+      }
+    }
+    cb(null);
+    return;
+  });
+}
 
 app.get("/word", function (req, res) {
-  res.render("word");
+  let username = req.signedCookies["word-session"].user;
+  if (req.query.q) {
+    checkDictionary(username, req.query.q, function (results) {
+      if (results) {
+        res.render("word", {results: results, q: req.query.q})
+        return;
+      }
+      findTieredSynonyms(req.query.q, 3, function (results) {
+        let data = {q: req.query.q};
+        if (results.length > 0) {
+          data.results = results;
+        } else {
+          data.noResults = true;
+        }
+        storeInDictionary(username, req.query.q, results, function () {
+          res.render("word", data);
+        });
+      });
+    })
+    return;
+  }
+  res.render("word", {q:""});
+});
+
+app.get("/dictionary", function (req, res) {
+  let username = req.signedCookies["word-session"].user;
+  db.dictionary.findOne({username: username}, function (err, doc) {
+    if (err) {
+      throw new Error(err);
+    }
+    if (!doc) {
+      res.render("dictionary");
+      return;
+    }
+    let results = [];
+    for (let i = 0; i < doc.data.length; ++i) {
+      for (let j = 0; j < doc.data[i].result.length; ++j) {
+        if (results.indexOf(doc.data[i].result[j]) == -1) {
+          results.push(doc.data[i].result[j]);
+        }
+      }
+    }
+    res.render("dictionary", { dictionary: results })
+  });
 });
 
 app.get("/changepassword", function (req, res) {
@@ -143,7 +295,6 @@ app.post("/signup", function (req, res) {
       // res.render("signup", {alreadyExist: true})
       return;
     }
-    console.log(hashPassword(req.body.password));
     db.users.save({
       username: req.body.email,
       password: hashPassword(req.body.password)

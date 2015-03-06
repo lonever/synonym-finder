@@ -10,9 +10,18 @@ block content
   form(id='word-form' method="GET")
     div(class="word")
       span word
-      input(name="word", type="text")
-    button(submit=true) Find Synomyms!
+      input(name="q", type="text" value="#{q}")
+    button(submit=true) Find Synonyms!
+
+  if results
+    div
+      each val in results
+        span(class="found")= val
+  if noResults
+    div no results found for the word '#{q}' :c
 
   a(href="changepassword") Change password
-
+  br
+  a(href="dictionary") Dictionary
+  br
   a(href="logout") Logout
