@@ -1,0 +1,19 @@
+extends layout
+
+block content
+  h1 Sign up
+  if passwordDoNotMatch
+    div(class="error") Thou shall not pass! Your passwords don't match, try again.
+  if alreadyExist
+    div(class="error") Account already exist.
+  form(id='signup-form' method="POST")
+    div(class="user-input")
+      span email
+      input(name="email" type="email")
+    div(class="password-input")
+      span password
+      input(name="password" type="password" minlength=6)
+    div(class="confirm-password")
+      span confirm password (type your password again)
+      input(name="confirm-password" type="password" minlength=6)
+    button(submit=true) Sign up

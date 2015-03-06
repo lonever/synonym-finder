@@ -1,0 +1,18 @@
+extends layout
+
+block content
+  h1 Find a word
+  if invalidLogin
+    div(class="error") Email or password invalid.
+  if noPassword
+    div(class="error") Enter a password man.
+
+  form(id='word-form' method="GET")
+    div(class="word")
+      span word
+      input(name="word", type="text")
+    button(submit=true) Find Synomyms!
+
+  a(href="changepassword") Change password
+
+  a(href="logout") Logout

@@ -1,0 +1,18 @@
+extends layout
+
+block content
+  h1 Login
+  if invalidLogin
+    div(class="error") Email or password invalid.
+  if noPassword
+    div(class="error") Enter a password man.
+  form(id='login-form' method="POST" action="/login")
+    div(class="user-input")
+      span email
+      input(name="email", type="email")
+    div(class="password-input")
+      span password
+      input(name="password" type="password")
+    button(submit=true) Login
+
+  a(href="signup") Sign up
