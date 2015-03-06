@@ -17,6 +17,8 @@ let db = mongojs("words");
 
 db.users = db.collection("users");
 db.dictionary = db.collection("dictionary");
+db.users.ensureIndex( { username: 1 }, { unique: true } );
+db.dictionary.ensureIndex( { username: 1 }, { unique: true } );
 
 let app = express();
 
@@ -42,6 +44,9 @@ app.get("/", function (req, res) {
   res.render("index", {created: req.query.created});
 });
 
+app.get("/signup", function (req, res) {
+  res.render("signup");
+})
 
 app.post("/login", function (req, res) {
   if (!req.body.password) {
@@ -57,8 +62,7 @@ app.post("/login", function (req, res) {
       return;
     }
     if (user.password != hashPassword(req.body.password)) {
-      console.log(req.body.password);
-      res.render("index", {invalidLogin: true});
+      res.send(403);
       return;
     }
     let expiresAt = new Date(Date.now() + 360000);
@@ -67,6 +71,38 @@ app.post("/login", function (req, res) {
   });
 });
 
+app.post("/signup", function (req, res) {
+  let providedUserName = req.body.email;
+  console.log(providedUserName);
+  if (req.body.password != req.body["confirm-password"]) {
+    res.render("signup", {passwordDoNotMatch: true})
+    return;
+  }
+  db.users.findOne({username: req.body.email}, function (err, user) {
+    if (err) {
+      throw new Error(err);
+    }
+    if (user) {
+      res.render("signup", {alreadyExist: true})
+      return;
+    }
+    db.users.save({
+      username: req.body.email,
+      password: hashPassword(req.body.password)
+    }, function (err) {
+      if (err) {
+        if (err.code == 11000) { //dup
+          res.send(409);
+          return;
+        }
+        throw new Error(err);
+      }
+      res.redirect("/");
+    })
+  })
+})
+
+//pre login functions above
 
 app.use(function (req, res, next) {
   if (!req.signedCookies["word-session"]) {
@@ -183,7 +219,6 @@ function checkDictionary(username, word, cb) {
     }
     for (let i=0; i < doc.data.length; ++i) {
       if (word == doc.data[i].query) {
-        console.log("EXIST IN DICTIONARY!");
         cb(doc.data[i].result);
         return;
       }
@@ -198,7 +233,7 @@ app.get("/word", function (req, res) {
   if (req.query.q) {
     checkDictionary(username, req.query.q, function (results) {
       if (results) {
-        res.render("word", {results: results, q: req.query.q})
+        res.render("word", {results: results, q: req.query.q});
         return;
       }
       findTieredSynonyms(req.query.q, 3, function (results) {
@@ -269,43 +304,11 @@ app.post("/changepassword", function (req, res) {
 })
 
 
-app.get("/signup", function (req, res) {
-  res.render("signup");
-})
-
 app.get("/logout", function (req, res) {
   res.clearCookie("word-session");
   res.redirect("/");
 })
 
-
-// accept POST request on the homepage
-app.post("/signup", function (req, res) {
-  let providedUserName = req.body.email;
-  if (req.body.password != req.body["confirm-password"]) {
-    res.render("signup", {passwordDoNotMatch: true})
-    return;
-  }
-  db.users.findOne({username: req.body.email}, function (err, user) {
-    if (err) {
-      throw new Error(err);
-    }
-    if (user) {
-      res.send(400);
-      // res.render("signup", {alreadyExist: true})
-      return;
-    }
-    db.users.save({
-      username: req.body.email,
-      password: hashPassword(req.body.password)
-    }, function (err) {
-      if (err) {
-        throw new Error(err);
-      }
-      res.redirect("/");
-    })
-  })
-})
 
 // accept DELETE request at /user
 app.delete("/user", function (req, res) {
